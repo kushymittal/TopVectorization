@@ -2,6 +2,8 @@ import numpy as np
 from scipy.misc import imread
 from matplotlib.pyplot import imshow, show
 import matplotlib.pyplot as plt 
+import pickle
+import heapq
 
 def stroke_disam(im):
     (gradx, grady) = np.gradient(im)
@@ -55,22 +57,19 @@ def stroke_disam(im):
     print(it)
     for i in range(1,np.shape(im)[0]-1):
         for j in range(1,np.shape(im)[1]-1):
-            N = [[shifted_gradx[i+1, j], shifted_grady[i+1, j]],
-                 [shifted_gradx[i, j+1], shifted_grady[i, j+1]], 
-                 [shifted_gradx[i-1, j], shifted_grady[i-1, j]], 
-                 [shifted_gradx[i, j-1], shifted_grady[i, j-1]]]
+            N = [[deltax[i+1, j], deltay[i+1, j]],
+                 [deltax[i, j+1], deltay[i, j+1]], 
+                 [deltax[i-1, j], deltay[i-1, j]], 
+                 [deltax[i, j-1], deltay[i, j-1]]]
             for test in N: 
                 if rad[i, j] < np.linalg.norm(test):
-                    rad[i, j] = np.linalg.norm(test)
+                    rad[i, j] = 2*np.linalg.norm(test)
 
 
-    plt.figure(2)
-    imshow(M, cmap='gray')
-    plt.figure(3)
-    imshow(rad, cmap='gray')
 
     img = np.zeros(np.shape(im))
     srad = np.zeros(np.shape(im))
+    print(np.sum(rad)/np.count_nonzero(rad))
     for i in range(np.shape(im)[0]):
         for j in range(np.shape(im)[1]):
             if(deltax[i,j] == 0 and deltay[i,j] == 0):
@@ -80,6 +79,11 @@ def stroke_disam(im):
             img[int(si),int(sj)] = 1 
             srad[int(si),int(sj)] = rad[i,j]
 
+    plt.figure(2)
+    imshow(srad, cmap='gray')
+
+    plt.figure(3)
+    imshow(img, cmap='gray')
     return (img, srad)
 
 def topo_extraction(im, m):
@@ -90,6 +94,7 @@ def topo_extraction(im, m):
         for j in range(np.shape(im)[1]):
             if im[i,j] != 0:
                 nodes.add((i,j))
+    """
     for node in nodes: 
         maxdist = m[node[0],node[1]]
         #for di in range(-int(maxdist), int(maxdist)):
@@ -101,17 +106,20 @@ def topo_extraction(im, m):
             dist = np.sqrt(np.square(node[0]-other[0]) + np.square(node[1]-other[1]))
             if dist < maxdist:
                 edgelist[key(node, other)] = dist
-                print("hello")
+    """
+    with open("dump/edgelist", "r") as f:
+    #    pickle.dump(edgelist, f)
+        edgelist = pickle.load(f)
 
     #calculate MST
     print(len(edgelist))
     MST = getMST(nodes, edgelist)
     #prune 'twigs'
-    prune(MST)
+    return prune(MST, m)
     pass
 
 def getMST(nodes, edgelist):
-    A = []
+    A = {} 
     sets = {}
     s = np.argsort(edgelist.values())
     keys = edgelist.keys()
@@ -119,21 +127,72 @@ def getMST(nodes, edgelist):
     print(s)
     for node in nodes:
         sets[node] = set([node])
+        A[node] = {}
     for edge in edges:
         u = (edge[0], edge[1])
         v = (edge[2], edge[3])
         if findset(sets, u) is not findset(sets, v):
-            A += [edge]
-            sets[u].union(v)
-    print(len(A))
+            A[u][v] = edgelist[key(u,v)] 
+            A[v][u] = edgelist[key(u,v)]
+            sets = union(sets, u, v) 
+    count = 0
+    for curr_set in sets.values():
+        if len(curr_set) != 0:
+            count += 1
+            print(len(curr_set))
+    print(count)
+
+    
+
     return A
 
 def findset(sets, node):
-    for s in sets:
+    for s in sets.values():
         if node in s:
             return s
+    assert False 
+def union(sets, u, v):
+    for k in sets.keys():
+        if u in sets[k]:
+            uk = k
+    for k in sets.keys():
+        if v in sets[k]:
+            vk = k
+    sets[uk] = sets[uk] | sets[vk]
+    sets[vk] = set() 
+    return sets
 
-def prune(MST):
+def prune(MST, m):
+    heap = []
+    biggest_deleted = {}
+    for node in MST.keys(): 
+        biggest_deleted[node] = 0
+        if len(MST[node]) == 1:
+            heap += [node]
+    while heap != []:
+        heap = sorted(heap, key=lambda x: MST[x].values()[0])
+        node = heap[0]
+        heap = heap[1:]
+
+        other_coords = MST[node].keys()[0]
+        maxdist = m[node[0],node[1]]
+        if MST[node][other_coords] > maxdist:
+            continue 
+        biggest_deleted[other_coords] = max(biggest_deleted[other_coords], MST[node][other_coords])
+        del MST[other_coords][node]
+        if len(MST[otbreakher_coords]) == 1:
+            MST[other_coords][MST[other_coords].keys()[0]] += biggest_deleted[other_coords]
+            heap += [other_coords]
+        elif len(MST[other_coords]) == 0:
+            del MST[other_coords]
+            heap.remove(other_coords)
+
+        del MST[node]
+
+
+    #find all terminals and put in minheap based on current length + edgeweight
+    #pop and delete edge, add new terminal to min heap(if there is one)
+    print(len(MST))
     return MST
 
 
@@ -142,14 +201,33 @@ def key(a, b):
         return (a[0], a[1], b[0], b[1])
     return (b[0], b[1], a[0], a[1])
 
-def redraw(im):
+def redraw(MST, dim):
+    #trace centerlines
+    for node in MST.keys():
+        for other in MST[node].keys():
+            #draw a straight line
+            pass
+        pass
+    
+    # Second, our reverse drawing procedure
+    # utilizes the drawing topology to identify ambigu-
+    # ous regions (e.g., junctions and sharp corners) and then corrects the
+    # centerline estimates by choosing the most likely centerline config-
+    # uration among all possible ones.
+
     pass
 
 if __name__ == '__main__':
     im = imread('img/Screen Shot 2017-12-06 at 6.04.30 PM.png', flatten=True)
     plt.figure(1)
     imshow(im, cmap='gray')
-    (dis, rad) = stroke_disam(im)
+    # (dis, rad) = stroke_disam(im)
+    # with open("dump/disam", "w") as f:
+    #     pickle.dump(dis, f) 
+    # with open("dump/rad", "w") as f:
+    #     pickle.dump(rad, f)
+    dis = pickle.load(open("dump/disam", "r"))
+    rad = pickle.load(open("dump/rad", "r"))
     topo = topo_extraction(dis, rad)
     redraw(topo)
     show(block=True)
