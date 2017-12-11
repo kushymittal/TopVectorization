@@ -2,6 +2,7 @@ import numpy as np
 from scipy.misc import imread
 from matplotlib.pyplot import imshow, show
 import matplotlib.pyplot as plt 
+import matplotlib.lines as lines 
 import pickle
 import heapq
 
@@ -115,7 +116,7 @@ def topo_extraction(im, m):
     print(len(edgelist))
     MST = getMST(nodes, edgelist)
     #prune 'twigs'
-    return prune(MST, m)
+    return edgelist, prune(MST, m)
     pass
 
 def getMST(nodes, edgelist):
@@ -180,7 +181,7 @@ def prune(MST, m):
             continue 
         biggest_deleted[other_coords] = max(biggest_deleted[other_coords], MST[node][other_coords])
         del MST[other_coords][node]
-        if len(MST[otbreakher_coords]) == 1:
+        if len(MST[other_coords]) == 1:
             MST[other_coords][MST[other_coords].keys()[0]] += biggest_deleted[other_coords]
             heap += [other_coords]
         elif len(MST[other_coords]) == 0:
@@ -201,13 +202,43 @@ def key(a, b):
         return (a[0], a[1], b[0], b[1])
     return (b[0], b[1], a[0], a[1])
 
-def redraw(MST, dim):
-    #trace centerlines
+def redraw(MST, edgelist):
+    #choose endpoints
+    endpoints = []
     for node in MST.keys():
-        for other in MST[node].keys():
-            #draw a straight line
-            pass
+        if len(MST[node]) == 1 or len(MST[node]) > 2:
+            endpoints += [node]
+    print("endpoints: ", len(endpoints))
+    #trace centerlines
+    fig = plt.figure()
+    ax = fig.add_subplot(111)
+    count = 0
+    for node in endpoints:
+        count += 1
+        if count % 50 == 0:
+            print(count)
+        shortest_path = dijkstra(node, edgelist)       
+        x = [node[0]]
+        y = [node[1]]
+        for other in endpoints:
+            if other not in shortest_path:
+                continue
+            other_obj = shortest_path[other]
+            xr = []
+            yr = []
+            while other_obj.coords != node:
+                xr += [other_obj.coords[0]]
+                yr += [other_obj.coords[1]]
+                other_obj = other_obj.prev
+            x += xr[::-1]
+            y += yr[::-1]
+        line = lines.Line2D(x,y)
+        ax.add_line(line)
         pass
+    #draw the lines I guess
+    plt.show()
+
+
     
     # Second, our reverse drawing procedure
     # utilizes the drawing topology to identify ambigu-
@@ -216,6 +247,48 @@ def redraw(MST, dim):
     # uration among all possible ones.
 
     pass
+
+def dijkstra(start_node, el):
+
+    shortest_path = {}
+    node = start_node
+
+    frontier = [Node(node, 0, None)]
+    edgelist = {}
+    for pair in el.keys():
+        u = (pair[0],pair[1])
+        v = (pair[2],pair[3])
+        if u not in edgelist:
+            edgelist[u] = {}
+        if v not in edgelist:
+            edgelist[v] = {}
+        edgelist[u][v] = el[pair]
+        edgelist[v][u] = el[pair]
+
+    while len(frontier):
+        node = min(frontier, key=lambda x: x.dist)
+        #print(node)
+        #print(frontier)
+        frontier.remove(node)
+
+        if node.coords not in shortest_path:
+            shortest_path[node.coords] = node 
+        else:
+            continue
+
+        for n in edgelist[node.coords].keys():
+            frontier.append(Node(n, node.dist + edgelist[node.coords][n], node))
+
+    return shortest_path
+
+        
+        
+class Node:
+    def __init__(self, coords, weight, node):
+        self.coords = coords
+        self.dist = weight
+        self.prev = node
+
 
 if __name__ == '__main__':
     im = imread('img/Screen Shot 2017-12-06 at 6.04.30 PM.png', flatten=True)
@@ -228,6 +301,6 @@ if __name__ == '__main__':
     #     pickle.dump(rad, f)
     dis = pickle.load(open("dump/disam", "r"))
     rad = pickle.load(open("dump/rad", "r"))
-    topo = topo_extraction(dis, rad)
-    redraw(topo)
+    edgelist, MST = topo_extraction(dis, rad)
+    redraw(MST, edgelist)
     show(block=True)
