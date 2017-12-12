@@ -18,8 +18,8 @@ def stroke_disam(im):
     rdeltay = np.zeros(np.shape(im))
     #while sum of M mask is greater than min
     it = 0
-    dt = -.01
-    while np.sum(M) > count * .01 and it < 1000:
+    dt = - .1
+    while np.sum(M) > count * .01:
         it += 1
         #move pixels
         deltax += dt*gradx*M
@@ -31,6 +31,23 @@ def stroke_disam(im):
             for j in range(np.shape(im)[1]):
                 si = int(i + deltax[i,j])
                 sj = int(j + deltay[i,j])
+                if si > np.shape(im)[0] - 1:
+                    deltax[i,j] += np.shape(im)[0] - si - 1
+                    si = np.shape(im)[0] - 1
+                    M[i,j] = 0
+                if sj > np.shape(im)[1] - 1:
+                    deltax[i,j] += np.shape(im)[1] - sj - 1
+                    sj = np.shape(im)[1] - 1
+                    M[i,j] = 0
+                if si < 0:
+                    deltax[i,j] -= si
+                    si = 0
+                    M[i,j] = 0
+                if sj < 0:
+                    deltax[i,j] -= sj 
+                    sj = 0 
+                    M[i,j] = 0
+
                 if np.sqrt(np.square(gradx[i,j]) + np.square(grady[i,j])) > \
                         np.sqrt(np.square(shifted_gradx[i,j]) + np.square(shifted_grady[i,j])):
                     shifted_gradx[si,sj] = gradx[i,j]  
@@ -42,10 +59,10 @@ def stroke_disam(im):
                 si = int(i + deltax[i,j])
                 sj = int(j + deltay[i,j])
 
-                N = [[shifted_gradx[si+1, sj], shifted_grady[si+1, sj]],
-                     [shifted_gradx[si, sj+1], shifted_grady[si, sj+1]], 
-                     [shifted_gradx[si-1, sj], shifted_grady[si-1, sj]], 
-                     [shifted_gradx[si, sj-1], shifted_grady[si, sj-1]]]
+                N = [[shifted_gradx[min(si+1, np.shape(im)[0]-1), sj], shifted_grady[min(si+1, np.shape(im)[0]-1), sj]],
+                     [shifted_gradx[si, min(sj+1, np.shape(im)[1]-1)], shifted_grady[si, min(sj+1, np.shape(im)[1]-1)]], 
+                     [shifted_gradx[max(0,si-1), sj], shifted_grady[max(0,si-1), sj]], 
+                     [shifted_gradx[si, max(0,sj-1)], shifted_grady[si, max(0, sj-1)]]]
                 Nij = [[-1,0], [0,1], [1, 0], [0,-1]]
                 for x in range(len(N)):
                     test = N[x]
@@ -54,7 +71,6 @@ def stroke_disam(im):
                         M[i,j] = 0
 
     print(np.sum(M), count)
-    print(it)
     for i in range(1,np.shape(im)[0]-1):
         for j in range(1,np.shape(im)[1]-1):
             N = [[deltax[i+1, j], deltay[i+1, j]],
@@ -63,13 +79,13 @@ def stroke_disam(im):
                  [deltax[i, j-1], deltay[i, j-1]]]
             for test in N: 
                 if rad[i, j] < np.linalg.norm(test):
-                    rad[i, j] = np.linalg.norm(test)
+                    rad[i, j] = 2*np.linalg.norm(test)
 
 
 
     img = np.zeros(np.shape(im))
     srad = np.zeros(np.shape(im))
-    print(np.sum(rad)/np.count_nonzero(rad))
+    print("mean width", np.sum(rad)/np.count_nonzero(rad))
     for i in range(np.shape(im)[0]):
         for j in range(np.shape(im)[1]):
             if(deltax[i,j] == 0 and deltay[i,j] == 0):
@@ -116,7 +132,7 @@ def topo_extraction(im, m):
         nodes = pickle.load(f)
     """
     #calculate MST
-    print(len(edgelist))
+    print("num edges", len(edgelist))
     MST = getMST(nodes, edgelist)
     #prune 'twigs'
     return edgelist, prune(MST, m)
@@ -144,7 +160,7 @@ def getMST(nodes, edgelist):
         if len(curr_set) != 0:
             count += 1
             #print(len(curr_set))
-    print(count)
+    print("conn comp", count)
 
     
 
@@ -175,13 +191,11 @@ def prune(MST, m):
             heap += [node]
     while heap != []:
         node = min(heap, key=lambda x: list(MST[x].values())[0])
-        del heap[node]
+        heap.remove(node)
 
         other_coords = list(MST[node].keys())[0]
         maxdist = m[node[0],node[1]]
         if MST[node][other_coords] > 2*maxdist:
-            if len(MST[other_coords]) == 0:
-                heap.remove(other_coords)
             continue 
         biggest_deleted[other_coords] = max(biggest_deleted[other_coords], MST[node][other_coords])
         del MST[other_coords][node]
@@ -296,7 +310,7 @@ class Node:
 
 
 if __name__ == '__main__':
-    im = spm.imread('img/Screen Shot 2017-12-06 at 6.04.30 PM.png', flatten=True)
+    im = spm.imread('img/small.gif', flatten=True)
     plt.figure(1)
     plt.imshow(im, cmap='gray')
     (dis, rad) = stroke_disam(im)
