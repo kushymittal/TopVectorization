@@ -10,132 +10,112 @@ def stroke_disam(im):
     #build M mask
     norm_threshold = .1*np.max(np.sqrt(np.square(gradx) + np.square(grady))) 
     M = np.sqrt(np.square(gradx) + np.square(grady)) >= norm_threshold
+    sh = np.shape(im)
     count = np.sum(M)
-    rad = np.zeros(np.shape(im))
-    deltax = np.zeros(np.shape(im))
-    deltay = np.zeros(np.shape(im))
-    rdeltax = np.zeros(np.shape(im))
-    rdeltay = np.zeros(np.shape(im))
+    rad = np.zeros(sh)
+    deltax = np.zeros(sh)
+    deltay = np.zeros(sh)
+    rdeltax = np.zeros(sh)
+    rdeltay = np.zeros(sh)
     #while sum of M mask is greater than min
     it = 0
-    dt = - .1
+    dt = - .01
     while np.sum(M) > count * .01:
         it += 1
         #move pixels
         deltax += dt*gradx*M
         deltay += dt*grady*M
-        shifted_gradx = np.zeros(np.shape(im))
-        shifted_grady = np.zeros(np.shape(im))
+        shifted_grads = {} 
         #remove finished ones
-        for i in range(np.shape(im)[0]):
-            for j in range(np.shape(im)[1]):
+        for i in range(sh[0]):
+            for j in range(sh[1]):
                 si = int(i + deltax[i,j])
                 sj = int(j + deltay[i,j])
-                if si > np.shape(im)[0] - 1:
-                    deltax[i,j] += np.shape(im)[0] - si - 1
-                    si = np.shape(im)[0] - 1
+                if si >= sh[0] or sj >= sh[1] or si < 0 or sj < 0:
+                    deltax[i,j] -= dt*gradx[i,j]
+                    deltay[i,j] -= dt*grady[i,j]
+                    si = int(i + deltax[i,j])
+                    sj = int(j + deltay[i,j])
                     M[i,j] = 0
-                if sj > np.shape(im)[1] - 1:
-                    deltax[i,j] += np.shape(im)[1] - sj - 1
-                    sj = np.shape(im)[1] - 1
-                    M[i,j] = 0
-                if si < 0:
-                    deltax[i,j] -= si
-                    si = 0
-                    M[i,j] = 0
-                if sj < 0:
-                    deltax[i,j] -= sj 
-                    sj = 0 
-                    M[i,j] = 0
-
-                if np.sqrt(np.square(gradx[i,j]) + np.square(grady[i,j])) > \
-                        np.sqrt(np.square(shifted_gradx[i,j]) + np.square(shifted_grady[i,j])):
-                    shifted_gradx[si,sj] = gradx[i,j]  
-                    shifted_grady[si,sj] = grady[i,j]  
-        for i in range(1,np.shape(im)[0]-1):
-            for j in range(1,np.shape(im)[1]-1):
+                if si not in shifted_grads:
+                    shifted_grads[si] = {}
+                if sj not in shifted_grads[si]:
+                    shifted_grads[si][sj] = []
+                if deltax[i,j] != 0 or deltay[i,j] != 0:
+                    shifted_grads[si][sj] += [(gradx[i,j], grady[i,j])]  
+        for i in range(1,sh[0]-1):
+            for j in range(1,sh[1]-1):
                 if M[i,j] == 0:
                     continue
                 si = int(i + deltax[i,j])
                 sj = int(j + deltay[i,j])
 
-                N = [[shifted_gradx[min(si+1, np.shape(im)[0]-1), sj], shifted_grady[min(si+1, np.shape(im)[0]-1), sj]],
-                     [shifted_gradx[si, min(sj+1, np.shape(im)[1]-1)], shifted_grady[si, min(sj+1, np.shape(im)[1]-1)]], 
-                     [shifted_gradx[max(0,si-1), sj], shifted_grady[max(0,si-1), sj]], 
-                     [shifted_gradx[si, max(0,sj-1)], shifted_grady[si, max(0, sj-1)]]]
-                Nij = [[-1,0], [0,1], [1, 0], [0,-1]]
-                for x in range(len(N)):
-                    test = N[x]
-                    if np.dot(test,[gradx[i,j], grady[i, j]]) < 0 and  \
-                       np.dot(Nij[x],[gradx[i,j], grady[i,j]]):
-                        M[i,j] = 0
+                Nij = [[-1,0], [-1,1], [0,1], [1,1], [1, 0], [1,-1], [0,-1], [-1,-1]]
+                for k in range(len(Nij)):
+                    x = Nij[k]
+                    if si + x[0] >= sh[0] or sj + x[1] >= sh[1] or si + x[0] < 0 or sj + x[1] < 0:
+                        continue
+                    for test in shifted_grads.get(si+x[0], {}).get(sj+x[1], []): 
+                        if np.dot(test,[gradx[i,j], grady[i, j]]) < 0 and  \
+                           np.dot(x,[gradx[i,j], grady[i,j]]):
+                            M[i,j] = 0
 
-    print(np.sum(M), count)
-    for i in range(1,np.shape(im)[0]-1):
-        for j in range(1,np.shape(im)[1]-1):
+    print(np.max(deltax), np.max(deltay), np.sum(M))
+    for i in range(1, sh[0]-1):
+        for j in range(1, sh[1]-1):
             N = [[deltax[i+1, j], deltay[i+1, j]],
-                 [deltax[i, j+1], deltay[i, j+1]], 
+                 [deltax[i, j+1], deltay[i, j+1]],
                  [deltax[i-1, j], deltay[i-1, j]], 
+                 [deltax[i, j], deltay[i, j]], 
+                 [deltax[i+1, j+1], deltay[i+1, j+1]],
+                 [deltax[i-1, j+1], deltay[i-1, j+1]],
+                 [deltax[i-1, j-1], deltay[i-1, j-1]],
+                 [deltax[i+1, j-1], deltay[i+1, j-1]],
                  [deltax[i, j-1], deltay[i, j-1]]]
             for test in N: 
                 if rad[i, j] < np.linalg.norm(test):
-                    rad[i, j] = 2*np.linalg.norm(test)
+                    rad[i, j] = np.linalg.norm(test)
 
+    nodes = {}
+    for i in range(sh[0]):
+        for j in range(sh[1]):
+            if deltax[i,j] != 0 or deltay[i,j] != 0:
+                nodes[i+deltax[i,j],j+deltay[i,j]] = rad[i,j]
 
-
-    img = np.zeros(np.shape(im))
-    srad = np.zeros(np.shape(im))
     print("mean width", np.sum(rad)/np.count_nonzero(rad))
-    for i in range(np.shape(im)[0]):
-        for j in range(np.shape(im)[1]):
-            if(deltax[i,j] == 0 and deltay[i,j] == 0):
-                continue
-            si = int(i + deltax[i,j])
-            sj = int(j + deltay[i,j])
-            img[int(si),int(sj)] = 1 
-            srad[int(si),int(sj)] = rad[i,j]
+    print("node count", len(nodes)) 
 
-    plt.figure(2)
-    plt.imshow(srad, cmap='gray')
+    return nodes
 
-    plt.figure(3)
-    plt.imshow(img, cmap='gray')
-    return (img, srad)
-
-def topo_extraction(im, m):
+def topo_extraction(nodes):
     #build graph
-    nodes = set()
     edgelist = {} 
-    for i in range(np.shape(im)[0]):
-        for j in range(np.shape(im)[1]):
-            if im[i,j] != 0:
-                nodes.add((i,j))
-    for node in nodes: 
-        maxdist = m[node[0],node[1]]
+    k = list(nodes.keys())
+    for n in range(len(k)): 
+        if n % 500 == 0:
+            print(n)
+        node = k[n]
         #for di in range(-int(maxdist), int(maxdist)):
         #    for dj in range(-int(maxdist), int(maxdist)):
         #        other = (i+di, j + dj)
-        for other in nodes:
+        for m in range(n,len(k)):
+            other = k[m]
             if other == node: # or other not in nodes:
                 continue
             dist = np.sqrt(np.square(node[0]-other[0]) + np.square(node[1]-other[1]))
-            if dist < maxdist:
+            if dist < nodes[node]:
                 edgelist[key(node, other)] = dist
     with open("dump/edgelist", "wb") as f:
         pickle.dump(edgelist, f)
-    with open("dump/nodes", "wb") as f:
-        pickle.dump(nodes, f)
     """
     with open("dump/edgelist", "rb") as f:
         edgelist = pickle.load(f)
-    with open("dump/nodes", "rb") as f:
-        nodes = pickle.load(f)
     """
     #calculate MST
     print("num edges", len(edgelist))
     MST = getMST(nodes, edgelist)
     #prune 'twigs'
-    return edgelist, prune(MST, m)
+    return edgelist, prune(MST, nodes)
     pass
 
 def getMST(nodes, edgelist):
@@ -145,7 +125,7 @@ def getMST(nodes, edgelist):
     keys = list(edgelist.keys())
     edges = [keys[x] for x in s]
     print(s)
-    for node in nodes:
+    for node in nodes.keys():
         sets[node] = set([node])
         MST[node] = {}
     for edge in edges:
@@ -182,7 +162,7 @@ def union(sets, u, v):
     sets[vk] = set() 
     return sets
 
-def prune(MST, m):
+def prune(MST, nodes):
     heap = []
     biggest_deleted = {}
     for node in MST.keys(): 
@@ -194,8 +174,8 @@ def prune(MST, m):
         heap.remove(node)
 
         other_coords = list(MST[node].keys())[0]
-        maxdist = m[node[0],node[1]]
-        if MST[node][other_coords] > 2*maxdist:
+        maxdist = nodes[node] 
+        if MST[node][other_coords] > maxdist:
             continue 
         biggest_deleted[other_coords] = max(biggest_deleted[other_coords], MST[node][other_coords])
         del MST[other_coords][node]
@@ -228,27 +208,37 @@ def redraw(MST, edgelist, dims):
             endpoints += [node]
     print("endpoints: ", len(endpoints))
     #trace centerlines
-    plt.show()
-    fig = plt.figure()
+    fig = plt.figure(2)
     ax = fig.add_subplot(111)
     count = 0
+
+    el= {}
+    for pair in edgelist.keys():
+        u = (pair[0],pair[1])
+        v = (pair[2],pair[3])
+        if u not in el:
+            el[u] = {}
+        if v not in el:
+            el[v] = {}
+        el[u][v] = edgelist[pair]
+        el[v][u] = edgelist[pair]
+
     for node in endpoints:
         count += 1
-        if count % 50 == 0:
+        if count % 5 == 0:
             print(count)
-        shortest_path = dijkstra(node, edgelist)       
+        shortest_path = dijkstra(node, el)       
         for other in endpoints:
+            #other_obj = astar(node, other, edgelist)       
+            if other not in shortest_path: 
+                continue
             x = []
             y = []
-            if other not in shortest_path:
-                continue
             other_obj = shortest_path[other]
-            while other_obj.coords != node:
+            while other_obj != None:
                 x += [dims[0] - other_obj.coords[0]]
                 y += [other_obj.coords[1]]
                 other_obj = other_obj.prev
-            x += [dims[0] - node[0]] 
-            y += [node[1]] 
             line = lines.Line2D(y,x)
             ax.add_line(line)
         pass
@@ -266,24 +256,32 @@ def redraw(MST, edgelist, dims):
     # uration among all possible ones.
 
     pass
+"""
+def astar(start_node, dest, edeglist):
 
-def dijkstra(start_node, el):
+    node = start_node
+
+    frontier = [Node(node, 0, 0, 0, None)]
+
+    while len(frontier):
+        node = min(frontier, key=lambda x: x.dist+x.h)
+        #print(node)
+        #print(frontier)
+        frontier.remove(node)
+        if node.coords == dest:
+            return node 
+        for n in edgelist[node.coords].keys():
+            h = np.sqrt((dest[0] - n[0])**2+(dest[1] - n[1])**2) #line dist 
+            frontier.append(Node(n, node.dist+node.weight, edgelist[node.coords][n], h, node))
+    return None
+
+"""
+
+def dijkstra(start_node, edgelist):
 
     shortest_path = {}
     node = start_node
-
     frontier = [Node(node, 0, None)]
-    edgelist = {}
-    for pair in el.keys():
-        u = (pair[0],pair[1])
-        v = (pair[2],pair[3])
-        if u not in edgelist:
-            edgelist[u] = {}
-        if v not in edgelist:
-            edgelist[v] = {}
-        edgelist[u][v] = el[pair]
-        edgelist[v][u] = el[pair]
-
     while len(frontier):
         node = min(frontier, key=lambda x: x.dist)
         #print(node)
@@ -303,24 +301,25 @@ def dijkstra(start_node, el):
         
         
 class Node:
-    def __init__(self, coords, weight, node):
+    #def __init__(self, coords, dist, weight, h, node):
+    def __init__(self, coords, dist, node):
         self.coords = coords
-        self.dist = weight
+        self.dist = dist
+        #self.weight = weight
+        #self.h = h
         self.prev = node
 
 
 if __name__ == '__main__':
-    im = spm.imread('img/small.gif', flatten=True)
+    im = spm.imread('img/Screen Shot 2017-12-06 at 6.04.30 PM.png', flatten=True)
+    #im = spm.imread('img/small.gif', flatten=True)
     plt.figure(1)
     plt.imshow(im, cmap='gray')
-    (dis, rad) = stroke_disam(im)
-    with open("dump/disam", "wb") as f:
-        pickle.dump(dis, f) 
-    with open("dump/rad", "wb") as f:
-        pickle.dump(rad, f)
-    #dis = pickle.load(open("dump/disam", "rb"))
-    #rad = pickle.load(open("dump/rad", "rb"))
-    edgelist, MST = topo_extraction(dis, rad)
+    nodes = stroke_disam(im)
+    with open("dump/nodes", "wb") as f:
+        pickle.dump(nodes, f) 
+    #dis = pickle.load(open("dump/nodes", "rb"))
+    edgelist, MST = topo_extraction(nodes)
     dims = np.shape(im)
     redraw(MST, edgelist, dims)
     plt.show(block=True)
