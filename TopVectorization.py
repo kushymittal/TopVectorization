@@ -10,6 +10,7 @@ def stroke_disam(im):
     #build M mask
     norm_threshold = .1*np.max(np.sqrt(np.square(gradx) + np.square(grady))) 
     M = np.sqrt(np.square(gradx) + np.square(grady)) >= norm_threshold
+    global sh
     sh = np.shape(im)
     count = np.sum(M)
     rad = np.zeros(sh)
@@ -74,7 +75,7 @@ def stroke_disam(im):
                  [deltax[i, j-1], deltay[i, j-1]]]
             for test in N: 
                 if rad[i, j] < np.linalg.norm(test):
-                    rad[i, j] = np.linalg.norm(test)
+                    rad[i, j] = 1.5*np.linalg.norm(test)
 
     nodes = {}
     for i in range(sh[0]):
@@ -84,7 +85,12 @@ def stroke_disam(im):
 
     print("mean width", np.sum(rad)/np.count_nonzero(rad))
     print("node count", len(nodes)) 
-
+    #plot nodes
+    arr = np.array(list(nodes.keys()))
+    x = arr[:, 1]
+    y = sh[0] - arr[:, 0]
+    plt.figure(4)
+    plt.plot(x,y, 'b.')
     return nodes
 
 def topo_extraction(nodes):
@@ -111,11 +117,46 @@ def topo_extraction(nodes):
     with open("dump/edgelist", "rb") as f:
         edgelist = pickle.load(f)
     """
+    global sh
+    #plot graph 
+    fig = plt.figure(5)
+    ax = fig.add_subplot(111)
+    ax.set_ylim(0, sh[0])
+    ax.set_xlim(0, sh[1])
+    for edge in edgelist.keys():
+        x = [edge[1], edge[3]]
+        y = [sh[0] - edge[0], sh[0] - edge[2]]
+        line = lines.Line2D(x,y)
+        ax.add_line(line)
     #calculate MST
     print("num edges", len(edgelist))
     MST = getMST(nodes, edgelist)
+    #plot MST 
+    fig = plt.figure(6)
+    ax = fig.add_subplot(111)
+    ax.set_ylim(0, sh[0])
+    ax.set_xlim(0, sh[1])
+    for u in MST.keys():
+        for v in MST[u].keys():
+            x = [u[1], v[1]]
+            y = [sh[0] - u[0], sh[0] - v[0]]
+            line = lines.Line2D(x,y)
+            ax.add_line(line)
     #prune 'twigs'
-    return edgelist, prune(MST, nodes)
+    pMST = prune(MST, nodes)
+    #plot pMST 
+    fig = plt.figure(7)
+    ax = fig.add_subplot(111)
+    ax.set_ylim(0, sh[0])
+    ax.set_xlim(0, sh[1])
+    for u in pMST.keys():
+        for v in pMST[u].keys():
+            x = [u[1], v[1]]
+            y = [sh[0] - u[0], sh[0] - v[0]]
+            line = lines.Line2D(x,y)
+            ax.add_line(line)
+    plt.show()
+    return edgelist, pMST 
     pass
 
 def getMST(nodes, edgelist):
@@ -311,8 +352,8 @@ class Node:
 
 
 if __name__ == '__main__':
-    im = spm.imread('img/Screen Shot 2017-12-06 at 6.04.30 PM.png', flatten=True)
-    #im = spm.imread('img/small.gif', flatten=True)
+    #im = spm.imread('img/Screen Shot 2017-12-06 at 6.04.30 PM.png', flatten=True)
+    im = spm.imread('img/small.gif', flatten=True)
     plt.figure(1)
     plt.imshow(im, cmap='gray')
     nodes = stroke_disam(im)
